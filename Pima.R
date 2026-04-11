@@ -1,5 +1,3 @@
-##### Pima dataset portfolio version
-
 # install.packages("arules")
 # install.packages("class")
 # install.packages("e1071")
@@ -50,48 +48,9 @@ train <- pima_data[-id, ]
 test  <- pima_data[id, ]
 
 ########################################
-##### 4. ROC plot function
+##### 4. KNN
 ########################################
-roc_plot <- function(prob, truth, name) {
-  pred_obj <- prediction(prob, truth)
-  perf_obj <- performance(pred_obj, "tpr", "fpr")
-  auc_obj <- performance(pred_obj, "auc")
-  auc_value <- round(auc_obj@y.values[[1]], 3)
-  
-  plot(
-    perf_obj,
-    col = "blue",
-    lwd = 3,
-    main = paste("ROC Curve -", name),
-    xlab = "False Positive Rate",
-    ylab = "True Positive Rate"
-  )
-  
-  abline(a = 0, b = 1, col = "red", lwd = 2, lty = 2)
-  
-  text(
-    x = 0.6,
-    y = 0.2,
-    labels = paste("AUC =", auc_value),
-    cex = 1.1
-  )
-  
-  legend(
-    "bottomright",
-    legend = c("ROC curve", "Baseline", paste("AUC =", auc_value)),
-    col = c("blue", "red", NA),
-    lwd = c(3, 2, NA),
-    lty = c(1, 2, NA),
-    bty = "n"
-  )
-  
-  return(auc_value)
-}
-
-########################################
-##### 5. KNN
-########################################
-k_set <- c(1, 3, 5, 7, 9)
+k_set <- c(3, 5, 7, 9)
 acc <- rep(0, length(k_set))
 
 for (i in 1:length(k_set)) {
@@ -102,54 +61,55 @@ for (i in 1:length(k_set)) {
 k_best <- k_set[which.max(acc)]
 k_best
 
-pred_tr <- knn(train[, -9], train[, -9], train[, 9], k = k_best)
-pred_ts <- knn(train[, -9], test[, -9], train[, 9], k = k_best, prob = TRUE)
+knn_tr <- knn(train[, -9], train[, -9], train[, 9], k = k_best)
+table(train$Outcome, knn_tr)
+sum(as.numeric(knn_tr == train[, 9])) / nrow(train)
 
-cat("KNN Train Accuracy:", mean(pred_tr == train[, 9]), "\n")
-cat("KNN Test Accuracy:", mean(pred_ts == test[, 9]), "\n")
+knn_ts <- knn(train[, -9], test[, -9], train[, 9], k = k_best, prob = TRUE)
+table(test$Outcome, knn_ts)
+sum(as.numeric(knn_ts == test[, 9])) / nrow(test)
 
-prob <- attr(pred_ts, "prob")
-prob_yes <- ifelse(pred_ts == "yes", prob, 1 - prob)
+# ROC
+knn_prob <- attr(knn_ts, "prob")
+knn_prob_yes <- ifelse(knn_ts == "yes", knn_prob, 1 - knn_prob)
 
-auc_knn <- roc_plot(prob_yes, test[, 9], paste("KNN (k =", k_best, ")"))
-cat("KNN Test AUC:", auc_knn, "\n")
+pred_knn <- prediction(knn_prob_yes, test$Outcome)
+perf_knn <- performance(pred_knn, measure = "tpr", x.measure = "fpr")
+auc_knn <- performance(pred_knn, "auc")
 
-########################################
-##### 6. Logistic
-########################################
-logit <- glm(Outcome ~ ., data = train, family = binomial)
-
-prob_tr <- predict(logit, train, type = "response")
-pred_tr <- ifelse(prob_tr > 0.5, "yes", "no")
-
-prob_ts <- predict(logit, test, type = "response")
-pred_ts <- ifelse(prob_ts > 0.5, "yes", "no")
-
-cat("Logit Train Accuracy:", mean(pred_tr == train[, 9]), "\n")
-cat("Logit Test Accuracy:", mean(pred_ts == test[, 9]), "\n")
-
-auc_logit <- roc_plot(prob_ts, test[, 9], "Logistic")
-cat("Logit Test AUC:", auc_logit, "\n")
+plot(perf_knn, col = "blue", main = paste("ROC curve using KNN (k =", k_best, ")"), xlab = "FPR", ylab = "TPR")
+abline(0, 1)
+auc_value_knn <- round(auc_knn@y.values[[1]], 3)
+text(0.4, 0.6, as.character(auc_value_knn))
 
 ########################################
-##### 7. Probit
+##### 5. Logistic Regression
 ########################################
-probit <- glm(Outcome ~ ., data = train, family = quasibinomial(link = "probit"))
+logit <- glm(Outcome ~ ., data = train, family = binomial(link = "logit"))
+summary(logit)
 
-prob_tr <- predict(probit, train, type = "response")
-pred_tr <- ifelse(prob_tr > 0.5, "yes", "no")
+logit_tr_prob <- predict.glm(logit, train, type = "response")
+logit_tr <- ifelse(logit_tr_prob > 0.5, "yes", "no")
+table(train$Outcome, logit_tr)
+sum(as.numeric(logit_tr == train[, 9])) / nrow(train)
 
-prob_ts <- predict(probit, test, type = "response")
-pred_ts <- ifelse(prob_ts > 0.5, "yes", "no")
+logit_ts_prob <- predict.glm(logit, test, type = "response")
+logit_ts <- ifelse(logit_ts_prob > 0.5, "yes", "no")
+table(test$Outcome, logit_ts)
+sum(as.numeric(logit_ts == test[, 9])) / nrow(test)
 
-cat("Probit Train Accuracy:", mean(pred_tr == train[, 9]), "\n")
-cat("Probit Test Accuracy:", mean(pred_ts == test[, 9]), "\n")
+# ROC
+pred_logit <- prediction(logit_ts_prob, test$Outcome)
+perf_logit <- performance(pred_logit, measure = "tpr", x.measure = "fpr")
+auc_logit <- performance(pred_logit, "auc")
 
-auc_probit <- roc_plot(prob_ts, test[, 9], "Probit")
-cat("Probit Test AUC:", auc_probit, "\n")
+plot(perf_logit, col = "green", main = "ROC curve using Logistic Regression", xlab = "FPR", ylab = "TPR")
+abline(0, 1)
+auc_value_logit <- round(auc_logit@y.values[[1]], 3)
+text(0.4, 0.6, as.character(auc_value_logit))
 
 ########################################
-##### 8. CART
+##### 6. CART
 ########################################
 tune_cart <- tune.rpart(
   Outcome ~ .,
@@ -159,32 +119,46 @@ tune_cart <- tune.rpart(
   maxdepth = c(3, 4, 5)
 )
 
-best <- tune_cart$best.parameters
+tune_cart$best.performance
+tune_cart$best.parameters
+
+best_cart <- tune_cart$best.parameters
 
 cart <- rpart(
   Outcome ~ .,
   data = train,
-  minsplit = best$minsplit,
-  minbucket = best$minbucket,
-  maxdepth = best$maxdepth
+  method = "class",
+  minsplit = best_cart$minsplit,
+  minbucket = best_cart$minbucket,
+  maxdepth = best_cart$maxdepth
 )
 
-rpart.plot(cart)
+print(cart)
+rpart.plot(cart, fallen.leaves = TRUE)
+cart$variable.importance
 
-prob_tr <- predict(cart, train, type = "prob")[, "yes"]
-pred_tr <- ifelse(prob_tr > 0.5, "yes", "no")
+cart_tr_prob <- predict(cart, train, type = "prob")
+cart_tr <- ifelse(cart_tr_prob[, "yes"] > 0.5, "yes", "no")
+table(train$Outcome, cart_tr)
+sum(as.numeric(cart_tr == train[, 9])) / nrow(train)
 
-prob_ts <- predict(cart, test, type = "prob")[, "yes"]
-pred_ts <- ifelse(prob_ts > 0.5, "yes", "no")
+cart_ts_prob <- predict(cart, test, type = "prob")
+cart_ts <- ifelse(cart_ts_prob[, "yes"] > 0.5, "yes", "no")
+table(test$Outcome, cart_ts)
+sum(as.numeric(cart_ts == test[, 9])) / nrow(test)
 
-cat("CART Train Accuracy:", mean(pred_tr == train[, 9]), "\n")
-cat("CART Test Accuracy:", mean(pred_ts == test[, 9]), "\n")
+# ROC
+pred_cart <- prediction(cart_ts_prob[, "yes"], test$Outcome)
+perf_cart <- performance(pred_cart, measure = "tpr", x.measure = "fpr")
+auc_cart <- performance(pred_cart, "auc")
 
-auc_cart <- roc_plot(prob_ts, test[, 9], "CART")
-cat("CART Test AUC:", auc_cart, "\n")
+plot(perf_cart, col = "red", main = "ROC curve using CART", xlab = "FPR", ylab = "TPR")
+abline(0, 1)
+auc_value_cart <- round(auc_cart@y.values[[1]], 3)
+text(0.4, 0.6, as.character(auc_value_cart))
 
 ########################################
-##### 9. SVM
+##### 7. SVM
 ########################################
 tune_svm <- tune.svm(
   Outcome ~ .,
@@ -193,29 +167,40 @@ tune_svm <- tune.svm(
   cost = 10^(-1:2)
 )
 
-best <- tune_svm$best.parameters
+summary(tune_svm)
+tune_svm$best.parameters
+
+best_svm <- tune_svm$best.parameters
 
 svm_model <- svm(
   Outcome ~ .,
   data = train,
-  cost = best$cost,
-  gamma = best$gamma,
+  cost = best_svm$cost,
+  gamma = best_svm$gamma,
   probability = TRUE
 )
 
-pred_tr <- predict(svm_model, train)
-pred_ts <- predict(svm_model, test, probability = TRUE)
+svm_tr <- predict(svm_model, train, probability = TRUE)
+table(train$Outcome, svm_tr)
+sum(as.numeric(svm_tr == train[, 9])) / nrow(train)
 
-cat("SVM Train Accuracy:", mean(pred_tr == train[, 9]), "\n")
-cat("SVM Test Accuracy:", mean(pred_ts == test[, 9]), "\n")
+svm_ts <- predict(svm_model, test, probability = TRUE)
+table(test$Outcome, svm_ts)
+sum(as.numeric(svm_ts == test[, 9])) / nrow(test)
 
-prob <- attr(pred_ts, "probabilities")[, "yes"]
+# ROC
+svm_prob <- attr(svm_ts, "probabilities")
+pred_svm <- prediction(svm_prob[, "yes"], test$Outcome)
+perf_svm <- performance(pred_svm, measure = "tpr", x.measure = "fpr")
+auc_svm <- performance(pred_svm, "auc")
 
-auc_svm <- roc_plot(prob, test[, 9], "SVM")
-cat("SVM Test AUC:", auc_svm, "\n")
+plot(perf_svm, col = "orange", main = "ROC curve using SVM", xlab = "FPR", ylab = "TPR")
+abline(0, 1)
+auc_value_svm <- round(auc_svm@y.values[[1]], 3)
+text(0.4, 0.6, as.character(auc_value_svm))
 
 ########################################
-##### 10. MLP
+##### 8. MLP
 ########################################
 norm <- data.Normalization(pima_data[, 1:8], type = "n4")
 norm <- data.frame(norm, Outcome = pima_data$Outcome)
@@ -226,17 +211,32 @@ test_n  <- norm[id, ]
 x_tr <- train_n[, 1:8]
 y_tr <- decodeClassLabels(train_n[, 9])
 x_ts <- test_n[, 1:8]
+y_ts <- decodeClassLabels(test_n[, 9])
 
 mlp <- mlp(x_tr, y_tr, size = 12, maxit = 300)
 
-pred_tr <- predict(mlp, x_tr)
-pred_ts <- predict(mlp, x_ts)
+mlp_tr_prob <- predict(mlp, x_tr)
+mlp_tr_prob <- as.matrix(mlp_tr_prob)
+colnames(mlp_tr_prob) <- colnames(y_tr)
 
-class_tr <- colnames(pred_tr)[max.col(pred_tr)]
-class_ts <- colnames(pred_ts)[max.col(pred_ts)]
+mlp_tr <- colnames(mlp_tr_prob)[max.col(mlp_tr_prob)]
+table(train_n$Outcome, mlp_tr)
+sum(as.numeric(mlp_tr == train_n[, 9])) / nrow(train_n)
 
-cat("MLP Train Accuracy:", mean(class_tr == train_n[, 9]), "\n")
-cat("MLP Test Accuracy:", mean(class_ts == test_n[, 9]), "\n")
+mlp_ts_prob <- predict(mlp, x_ts)
+mlp_ts_prob <- as.matrix(mlp_ts_prob)
+colnames(mlp_ts_prob) <- colnames(y_ts)
 
-auc_mlp <- roc_plot(pred_ts[, "yes"], test_n[, 9], "MLP")
-cat("MLP Test AUC:", auc_mlp, "\n")
+mlp_ts <- colnames(mlp_ts_prob)[max.col(mlp_ts_prob)]
+table(test_n$Outcome, mlp_ts)
+sum(as.numeric(mlp_ts == test_n[, 9])) / nrow(test_n)
+
+# ROC
+pred_mlp <- prediction(mlp_ts_prob[, "yes"], test_n$Outcome)
+perf_mlp <- performance(pred_mlp, measure = "tpr", x.measure = "fpr")
+auc_mlp <- performance(pred_mlp, "auc")
+
+plot(perf_mlp, col = "brown", main = "ROC curve using MLP", xlab = "FPR", ylab = "TPR")
+abline(0, 1)
+auc_value_mlp <- round(auc_mlp@y.values[[1]], 3)
+text(0.4, 0.6, as.character(auc_value_mlp))

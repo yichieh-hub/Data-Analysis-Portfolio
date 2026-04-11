@@ -81,9 +81,9 @@ cart_red_cls <- rpart(
   rating ~ .,
   red_cls_train,
   method = "class",
-  minsplit = 15,
-  minbucket = 10,
-  maxdepth = 3
+  minsplit = tune_cart_cls$best.parameters$minsplit,
+  minbucket = tune_cart_cls$best.parameters$minbucket,
+  maxdepth = tune_cart_cls$best.parameters$maxdepth
 )
 print(cart_red_cls)
 summary(cart_red_cls)
@@ -118,9 +118,9 @@ tune_rf_cls$best.parameters
 rf_red_cls <- randomForest(
   rating ~ .,
   data = red_cls_train,
-  ntree = 40,
-  mtry = 6,
-  nodesize = 10,
+  ntree = tune_rf_cls$best.parameters$ntree,
+  mtry = tune_rf_cls$best.parameters$mtry,
+  nodesize = tune_rf_cls$best.parameters$nodesize,
   importance = TRUE,
   proximity = TRUE,
   na.action = na.omit
@@ -187,10 +187,10 @@ cv_gbm_red_cls$bestTune
 gbm_red_cls <- gbm(
   rating ~ .,
   data = red_cls_train,
-  n.trees = cv_gbm_red_cls$bestTune[1],
-  interaction.depth = cv_gbm_red_cls$bestTune[2],
-  shrinkage = cv_gbm_red_cls$bestTune[3],
-  n.minobsinnode = cv_gbm_red_cls$bestTune[4]
+  n.trees = cv_gbm_red_cls$bestTune$n.trees,
+  interaction.depth = cv_gbm_red_cls$bestTune$interaction.depth,
+  shrinkage = cv_gbm_red_cls$bestTune$shrinkage,
+  n.minobsinnode = cv_gbm_red_cls$bestTune$n.minobsinnode
 )
 summary(gbm_red_cls)
 
@@ -300,23 +300,29 @@ for (i in 5:20)
 }
 
 plot(
-  5:20, acc_bpn_red_train, "l", col = 1, lty = 1,
-  ylab = "Accuracy", xlab = "Hidden Neurons",
-  ylim = c(min(min(acc_bpn_red_train), min(acc_bpn_red_test)),
-           max(max(acc_bpn_red_train), max(acc_bpn_red_test)))
+  5:20, acc_bpn_red_train,
+  type = "l",
+  col = 1,
+  lty = 1,
+  ylab = "Accuracy",
+  xlab = "Hidden Neurons",
+  ylim = c(
+    min(min(acc_bpn_red_train), min(acc_bpn_red_test)),
+    max(max(acc_bpn_red_train), max(acc_bpn_red_test))
+  )
 )
-lines(5:20, acc_bpn_red_test, col = 2, lty = 3)
-points(5:20, acc_bpn_red_train, col = 1, pch = "+")
-points(5:20, acc_bpn_red_test, col = 2, pch = "o")
-legend(15, 0.7, "train", bty = "n", cex = 1)
-legend(15, 0.6, "test", bty = "n", cex = 1)
+
+lines(  5:20, acc_bpn_red_test,  col = 2,  lty = 3)
+points(  5:20, acc_bpn_red_train,  col = 1,  pch = 3)
+points(  5:20, acc_bpn_red_test,  col = 2,  pch = 1)
+legend(  "topright",  legend = c("train", "test"),  col = c(1, 2),  lty = c(1, 3),  pch = c(3, 1),  bty = "n",  cex = 1)
 
 bpn_red_cls <- nnet(
   rating ~ .,
   data = red_cls_train,
-  size = 7,
+  size = 11,
   rang = rang_red_cls,
-  maxit = 300
+  maxit = 250
 )
 summary(bpn_red_cls)
 
@@ -327,7 +333,6 @@ sum(as.numeric(pred_bpn_red_cls_train == red_cls_train[, 12])) / nrow(red_cls_tr
 pred_bpn_red_cls_test <- predict(bpn_red_cls, red_cls_test[, -12], type = "class")
 table(red_cls_test[, 12], pred_bpn_red_cls_test)
 sum(as.numeric(pred_bpn_red_cls_test == red_cls_test[, 12])) / nrow(red_cls_test)
-
 #############################
 ## Classification summary  ##
 #############################
@@ -366,9 +371,9 @@ cart_red_reg <- rpart(
   quality ~ .,
   red_reg_train,
   method = "anova",
-  minsplit = 15,
-  minbucket = 10,
-  maxdepth = 6
+  minsplit = tune_cart_red_reg$best.parameters$minsplit,
+  minbucket = tune_cart_red_reg$best.parameters$minbucket,
+  maxdepth = tune_cart_red_reg$best.parameters$maxdepth
 )
 print(cart_red_reg)
 rpart.plot(cart_red_reg, type = 4, fallen.leaves = FALSE)
@@ -506,12 +511,20 @@ round(result_table, 4)
 ######################
 ## 1. PCA for red   ##
 ######################
-red_pca <- prcomp(~., data = red_wine[, -12], center = TRUE, scale = TRUE)
+red_pca <- prcomp(
+  red_wine[, 1:11],
+  center = TRUE,
+  scale = TRUE
+)
 summary(red_pca)
 plot(red_pca, type = "line", main = "Scree Plot for redwine")
 red_pca$sdev^2
 
-red_rpca <- principal(red_wine[, -12], nfactors = 5, scores = TRUE)
+red_rpca <- principal(
+  red_wine[, 1:11],
+  nfactors = 5,
+  scores = TRUE
+)
 print(red_rpca)
 red_rpca$loadings
 

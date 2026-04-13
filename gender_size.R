@@ -54,8 +54,11 @@ cov(gender_data$Height, gender_data$Weight)
 gender_cov <- cov(gender_data[, 1:3], use = "pairwise")
 gender_cov
 
-skewness(gender_data[, 1:3])
-kurtosis(gender_data[, 1:3])
+gender_skewness <- sapply(gender_data[, 1:3], skewness)
+gender_skewness
+
+gender_kurtosis <- sapply(gender_data[, 1:3], kurtosis)
+gender_kurtosis
 
 ####################
 # 5. Visualization #
@@ -110,13 +113,16 @@ plot(height_ecdf, xlab = "Height", main = "Cumulative Frequency of Height")
 # 6. Normality / Statistical   #
 ################################
 hist(gender_data$Height, breaks = seq(min(gender_data$Height), max(gender_data$Height), 0.5))
+
 hist(gender_data$Height, breaks = seq(min(gender_data$Height), max(gender_data$Height), 1), prob = TRUE)
-qqnorm(gender_data$Height, xlab = "Z-score", ylab = "Height")
-qqline(gender_data$Height, col = "red")
 curve(
   dnorm(x, mean(gender_data$Height), sd(gender_data$Height)),
-  min(gender_data$Height), max(gender_data$Height), col = "red"
+  min(gender_data$Height), max(gender_data$Height), col = "red",add = TRUE
 )
+
+qqnorm(gender_data$Height, xlab = "Z-score", ylab = "Height")
+qqline(gender_data$Height, col = "red")
+
 
 shapiro.test(gender_data$Height)
 ad.test(gender_data$Height)
@@ -199,7 +205,7 @@ female_outlier_data[which(female_iso_score > 0.6), ]
 gender_outlier_lm <- lm(Waist ~ Height + Weight, gender_outlier_data[, -4])
 summary(gender_outlier_lm)
 outlierTest(gender_outlier_lm)
-which(as.vector(hatvalues(gender_outlier_lm)) > (2 * 3 / 146))
+which(as.vector(hatvalues(gender_outlier_lm)) > (2 * 3 / 146)) #2*p/n
 
 #################
 # 10. Clustering
@@ -345,6 +351,7 @@ points(cmeans_result$centers[, 2:3], col = 1:cmeans_final_k, pch = 8)
 #########################
 # Hierarchical Clustering
 #########################
+set.seed(123)
 sample_id <- sample(1:nrow(gender_data), 0.2 * nrow(gender_data))
 
 hierarchical_average <- hclust(dist(gender_data[sample_id, -4]), method = "average")
@@ -445,7 +452,7 @@ test_label_num <- ifelse(test_gender$Gender == "male", 1, 0)
 ##########
 # KNN
 ##########
-knn_tuned <- tune.knn(train_gender[, -4], train_gender[, 4], k = c(1, 3, 5, 7, 9))
+knn_tuned <- tune.knn(train_gender[, -4], train_gender[, 4], k = c( 3, 5, 7, 9))
 knn_tuned$best.model
 knn_best_k <- knn_tuned$best.parameters$k
 knn_best_k
@@ -497,16 +504,18 @@ names(naive_bayes_model_1)
 naive_bayes_model_1$apriori
 naive_bayes_model_1$tables
 
-naive_bayes_train_prob <- predict(naive_bayes_model_1, train_gender[, -4], type = "raw")
-naive_bayes_train_class <- colnames(naive_bayes_train_prob)[max.col(naive_bayes_train_prob)]
+naive_bayes_train_pred <- predict(naive_bayes_model_1, train_gender[, -4], type = "raw")
+naive_bayes_train_prob <- naive_bayes_train_pred$posterior
+naive_bayes_train_class <- naive_bayes_train_pred$class
 naive_bayes_train_table <- table(train_gender$Gender, naive_bayes_train_class)
 naive_bayes_train_acc <- sum(diag(naive_bayes_train_table)) / sum(naive_bayes_train_table)
 naive_bayes_train_table
 naive_bayes_train_acc
 cat("Naive Bayes train predictive accuracy", 100 * naive_bayes_train_acc, "% \n")
 
-naive_bayes_test_prob <- predict(naive_bayes_model_1, test_gender[, -4], type = "raw")
-naive_bayes_test_class <- colnames(naive_bayes_test_prob)[max.col(naive_bayes_test_prob)]
+naive_bayes_test_pred <- predict(naive_bayes_model_1, test_gender[, -4], type = "raw")
+naive_bayes_test_prob <- naive_bayes_test_pred$posterior
+naive_bayes_test_class <- naive_bayes_test_pred$class
 naive_bayes_test_table <- table(test_gender$Gender, naive_bayes_test_class)
 naive_bayes_test_acc <- sum(diag(naive_bayes_test_table)) / sum(naive_bayes_test_table)
 naive_bayes_test_table
@@ -518,10 +527,6 @@ predict(naive_bayes_model_1, new_person_1)
 
 new_person_2 <- data.frame(Height = 166, Weight = 60, Waist = 27.5)
 predict(naive_bayes_model_1, new_person_2)
-
-naive_bayes_model_2 <- NaiveBayes(train_gender[, -4], train_gender[, 4])
-naive_bayes_prediction_2 <- predict(naive_bayes_model_2, train_gender[, -4])
-table(train_gender[, 4], naive_bayes_prediction_2$class)
 
 pred_nb_test <- prediction(naive_bayes_test_prob[, "male"], test_label_num)
 perf_nb_test <- performance(pred_nb_test, measure = "tpr", x.measure = "fpr")
@@ -563,36 +568,6 @@ logistic_test_acc <- sum(diag(logistic_test_table)) / sum(logistic_test_table)
 logistic_test_table
 logistic_test_acc
 cat("Logistic Regression test predictive accuracy", 100 * logistic_test_acc, "% \n")
-
-logistic_model_weight_waist <- glm(
-  formula = Gender ~ Weight + Waist,
-  family = binomial(link = "logit"),
-  data = train_gender
-)
-summary(logistic_model_weight_waist)
-logistic_prob_weight_waist <- predict.glm(logistic_model_weight_waist, type = "response", newdata = test_gender)
-logistic_class_weight_waist <- ifelse(logistic_prob_weight_waist > 0.5, "male", "female")
-table(test_gender[, 4], logistic_class_weight_waist)
-
-logistic_model_height_weight <- glm(
-  Gender ~ Height + Weight,
-  data = train_gender,
-  family = binomial(link = "logit")
-)
-summary(logistic_model_height_weight)
-logistic_prob_height_weight <- predict.glm(logistic_model_height_weight, type = "response", newdata = test_gender)
-logistic_class_height_weight <- ifelse(logistic_prob_height_weight > 0.5, "male", "female")
-table(test_gender[, 4], logistic_class_height_weight)
-
-logistic_model_height_waist <- glm(
-  Gender ~ Height + Waist,
-  data = train_gender,
-  family = binomial(link = "logit")
-)
-summary(logistic_model_height_waist)
-logistic_prob_height_waist <- predict.glm(logistic_model_height_waist, type = "response", newdata = test_gender)
-logistic_class_height_waist <- ifelse(logistic_prob_height_waist > 0.5, "male", "female")
-table(test_gender[, 4], logistic_class_height_waist)
 
 pred_logit_test <- prediction(logistic_prob_test, test_label_num)
 perf_logit_test <- performance(pred_logit_test, measure = "tpr", x.measure = "fpr")

@@ -70,8 +70,8 @@ cov(iris_df$Petal.Length, iris_df$Petal.Width)
 iris_cov <- cov(iris_df[, iris_var_index], use = "pairwise")
 iris_cov
 
-skewness(iris_df[, 1:4])
-kurtosis(iris_df[, 1:4])
+apply(iris_df[, 1:4], 2, skewness)
+apply(iris_df[, 1:4], 2, kurtosis)
 
 ############################################################
 #################### Visualization ##########################
@@ -162,15 +162,22 @@ plot(iris_ecdf, xlab = "Sepal.Length", main = "Cumulative frequency")
 #################### Normality Test #########################
 ############################################################
 hist(iris_df$Sepal.Length, breaks = seq(4.0, 8.0, 0.05))
-hist(iris_df$Sepal.Length, breaks = seq(4.0, 8.0, 0.25), prob = TRUE)
+
 qqnorm(iris_df$Sepal.Length, xlab = "Z-score", ylab = "Sepal.Length")
 qqline(iris_df$Sepal.Length, col = "red")
 
+hist(iris_df$Sepal.Length,
+     breaks = seq(4.0, 8.0, 0.25),
+     prob = TRUE)
+
 curve(
-  dnorm(x, mean(iris_df$Sepal.Length), sd(iris_df$Sepal.Length)),
-  4.0,
-  8.0,
-  col = "red"
+  dnorm(x,
+        mean(iris_df$Sepal.Length),
+        sd(iris_df$Sepal.Length)),
+  from = 4.0,
+  to = 8.0,
+  col = "red",
+  add = TRUE
 )
 
 shapiro.test(iris_df$Sepal.Length)
@@ -228,7 +235,12 @@ iris_nbclust_kmeans <- NbClust(
   method = "kmeans",
   index = "all"
 )
-iris_kmeans_best_k <- as.numeric(iris_nbclust_kmeans$Best.nc[1, "Number_clusters"])
+
+iris_nbclust_kmeans$Best.nc
+rownames(iris_nbclust_kmeans$Best.nc)
+colnames(iris_nbclust_kmeans$Best.nc)
+
+iris_kmeans_best_k <- as.numeric(iris_nbclust_kmeans$Best.nc["Number_clusters", 1])
 iris_kmeans_best_k
 
 set.seed(123)
@@ -242,9 +254,7 @@ table(iris_df$Species, iris_kmeans_best$cluster)
 plot(iris_df[, 1:2], pch = iris_kmeans_best$cluster, col = iris_kmeans_best$cluster)
 points(iris_kmeans_best$centers[, 1:2], col = 1:iris_kmeans_best_k, pch = 8)
 
-plot(iris_df[, 3:4], pch = iris_kmeans_best$cluster, col = iris_kmeans_best$cluster)
-points(iris_kmeans_best$centers[, 3:4], col = 1:iris_kmeans_best_k, pch = 8)
-
+\
 ################ K-medoids ################
 iris_pm_eval <- array(0, c(max_nc - min_nc + 1, 2))
 for (nc in min_nc:max_nc)
@@ -407,7 +417,7 @@ table(iris_df[, 5], iris_gmm_best$classification)
 
 iris_gmm_best$BIC
 
-iris_bic <- mclustBIC(iris_df[, -5], G = seq(from = 1, to = 9, by = 1))
+iris_bic <- mclustBIC(iris_df[, -5], G = seq(from = 2, to = 9, by = 1))
 iris_bic
 plot(iris_bic)
 
@@ -449,7 +459,7 @@ iris_knn_result <- table(y_test, iris_knn_test)
 sum(diag(iris_knn_result)) / sum(iris_knn_result)
 
 ################ Naive Bayes ################
-iris_nb_model <- NaiveBayes(Species ~ Petal.Length + Petal.Width, data = iris_train)
+iris_nb_model <- NaiveBayes(Species ~ ., data = iris_train)
 names(iris_nb_model)
 iris_nb_model$apriori
 iris_nb_model$tables
@@ -548,15 +558,6 @@ dotchart(
   col = "blue"
 )
 
-iris_sorted_loading_pc3 <- iris_loading[order(iris_loading[, 3]), 3]
-dotchart(
-  iris_sorted_loading_pc3,
-  main = "Loading Plot for PC3",
-  xlab = "Variable Loadings",
-  cex = 1.5,
-  col = "green"
-)
-
 ################ PCA by principal ################
 iris_rpca <- principal(iris_df[, -5], nfactors = 2, score = TRUE)
 print(iris_rpca)
@@ -566,7 +567,12 @@ iris_rpca_df <- data.frame(cbind(iris_rpca$scores, iris_df$Species))
 colnames(iris_rpca_df) <- c("RC1", "RC2", "Species")
 iris_rpca_df$Species <- as.factor(iris_rpca_df$Species)
 
-plot(iris_rpca_df$RC1, iris_rpca_df$RC2, pch = iris_rpca_df$Species, col = iris_rpca_df$Species)
+plot(
+  iris_rpca_df$RC1,
+  iris_rpca_df$RC2,
+  pch = as.numeric(iris_rpca_df$Species),
+  col = as.numeric(iris_rpca_df$Species)
+)
 
 ################ PCA + K-means ################
 iris_pca_km_eval <- array(0, c(max_nc - min_nc + 1, 2))
@@ -609,7 +615,7 @@ iris_test_pca_df  <- data.frame(PC1 = iris_test_pca[, 1],  PC2 = iris_test_pca[,
 iris_pca_knn_tuned <- tune.knn(
   iris_train_pca_df[, 1:2],
   iris_train_pca_df[, 3],
-  k = c(1, 3, 5, 7, 9)
+  k = c( 3, 5, 7, 9)
 )
 iris_pca_knn_tuned$best.model
 iris_pca_knn_best_k <- iris_pca_knn_tuned$best.parameters$k
